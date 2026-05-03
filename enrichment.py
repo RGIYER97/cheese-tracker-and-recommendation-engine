@@ -25,7 +25,15 @@ _BOILERPLATE = re.compile(
     r"cookie|privacy|sign in|log in|add to cart|buy now|shop now|"
     r"free shipping|in stock|out of stock|subscribe|newsletter|"
     r"breadcrumb|click here|javascript|per lb|\$\d|\d+ reviews|"
-    r"read more|see more|show more|back to",
+    r"read more|see more|show more|back to|"
+    # social media and generic site navigation
+    r"facebook|instagram|twitter|youtube|pinterest|tiktok|snapchat|"
+    r"\blinkedin\b|\bwhatsapp\b|"
+    # any bare domain token (word.com / word.net / word.org)
+    r"\b\w+\.(com|net|org|io|co|uk)\b|"
+    # navigation / shop chrome
+    r"\bgift\b|\bcart\b|\bcheckout\b|\bwishlist\b|\bfollow us\b|"
+    r"all rights reserved|copyright ©|\bterms\b.*\buse\b",
     re.IGNORECASE,
 )
 
@@ -69,10 +77,17 @@ def _extract_notes(content: str) -> str:
     sentences = re.split(r"(?<=[.!?])\s+", content.strip())
     clean: list[str] = []
     for s in sentences:
-        s = s.strip()
+        # Strip leading bullet markers (* - •) used on many cheese sites
+        s = re.sub(r"^[\*\-•]\s*", "", s.strip())
         if len(s) < 30:
             continue
         if _BOILERPLATE.search(s):
+            continue
+        # Skip lines that look like navigation / metadata lists
+        # (multiple whitespace-separated tokens that look like URLs or single words)
+        tokens = s.split()
+        url_like = sum(1 for t in tokens if re.search(r"\.(com|net|org|io|co)\b", t, re.I))
+        if url_like >= 2:
             continue
         clean.append(s)
         if len(clean) == 3:
