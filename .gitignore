@@ -1,0 +1,22 @@
+# secrets
+.env
+
+# python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+
+# runtime cache
+recommendations_cache.json
+
+# os / editor
+.DS_Store
+.claude/
+.cursor/
+.vscode/
+*.swp
