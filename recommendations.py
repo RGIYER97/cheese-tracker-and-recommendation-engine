@@ -67,11 +67,29 @@ Return ONLY a valid JSON array — no markdown fences, no prose. Each element:
 }"""
 
 
+def _format_top_cheeses(top: pd.DataFrame) -> str:
+    """Format top-rated cheeses showing both personal and professional notes per entry."""
+    has_prof = "Prof. Tasting Notes" in top.columns
+    lines = []
+    for _, row in top.iterrows():
+        lines.append(
+            f"- {row['Cheese Type']} — {row['Score']}/10  (from {row.get('From Where', '?')})"
+        )
+        personal = str(row.get("Tasting Notes") or "").strip()
+        if personal:
+            lines.append(f"    My notes: {personal}")
+        if has_prof:
+            prof = str(row.get("Prof. Tasting Notes") or "").strip()
+            if prof:
+                lines.append(f"    Prof. notes: {prof}")
+    return "\n".join(lines) if lines else "None"
+
+
 def _build_prompt(df: pd.DataFrame, num_recs: int, already_pinned: list[str] | None = None) -> str:
     top = df[df["Score"] >= 8].sort_values("Score", ascending=False)
     disliked = df[df["Score"] < 6]
 
-    top_str = top[["Cheese Type", "Score", "Tasting Notes", "From Where"]].to_string(index=False)
+    top_str = _format_top_cheeses(top)
     disliked_str = (
         disliked[["Cheese Type", "Score", "Tasting Notes"]].to_string(index=False)
         if not disliked.empty
@@ -98,6 +116,9 @@ LESS ENJOYED (below 6/10):
 
 OVERALL AVERAGE SCORE: {df["Score"].mean():.1f}/10
 {tag_section}{pinned_section}
+IMPORTANT — when "My notes" and "Prof. notes" describe different characteristics for the same cheese, \
+trust "My notes". They reflect what I actually experienced; professional descriptions are a reference only.
+
 Based on this history, my flavor preferences are clearly: bold/distinctive flavors, creamy or meltable \
 textures, fruity or tangy notes, and well-salted cheeses. I dislike bland/flavorless cheeses with no wow factor.
 

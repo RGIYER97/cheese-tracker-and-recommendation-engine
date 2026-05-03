@@ -129,7 +129,7 @@ def update_enrichment(df_enriched: pd.DataFrame) -> None:
 # ── Cheese Recommendation tab ──────────────────────────────────────────────────
 
 REC_SHEET_NAME = "Cheese Recommendation"
-REC_COLS = ["Name", "Tasting Notes", "Price", "Link", "Image"]
+REC_COLS = ["Name", "Tasting Notes", "Price", "Where to Find It", "Link", "Image"]
 
 # Official store homepages — matched against store names in recommendations
 _STORE_URLS: list[tuple[str, str]] = [
@@ -160,13 +160,29 @@ def _store_url(store_name: str) -> str:
 
 
 def _ensure_rec_sheet(sh: gspread.Spreadsheet) -> gspread.Worksheet:
-    """Return the Cheese Recommendation worksheet, creating it with headers if absent."""
+    """Return the Cheese Recommendation worksheet, creating it with headers if absent.
+    Also adds any columns present in REC_COLS that are missing from an existing sheet."""
     try:
-        return sh.worksheet(REC_SHEET_NAME)
+        ws = sh.worksheet(REC_SHEET_NAME)
     except gspread.WorksheetNotFound:
         ws = sh.add_worksheet(title=REC_SHEET_NAME, rows=200, cols=len(REC_COLS))
         ws.append_row(REC_COLS, value_input_option="USER_ENTERED")
         return ws
+
+    # Sheet exists — ensure every expected column is present
+    existing_headers = ws.row_values(1)
+    batch = []
+    for col_name in REC_COLS:
+        if col_name not in existing_headers:
+            col_num = len(existing_headers) + 1
+            existing_headers.append(col_name)
+            batch.append({
+                "range": gspread.utils.rowcol_to_a1(1, col_num),
+                "values": [[col_name]],
+            })
+    if batch:
+        ws.batch_update(batch, value_input_option="USER_ENTERED")
+    return ws
 
 
 def append_cheese(
@@ -239,8 +255,19 @@ def pin_recommendation(rec: dict) -> None:
     img_url = rec.get("picture_url", "")
     img_formula = f'=IMAGE("{img_url}", 1)' if img_url else ""
 
-    # Prefer the official homepage of the first listed store over the generic Tavily link
+    # Build "Where to Find It" — "Store Name — Location" per store, joined by newlines
     stores = rec.get("stores", [])
+    where_parts = []
+    for store in stores:
+        name = store.get("name", "").strip()
+        loc  = store.get("location", "").strip()
+        if name and loc:
+            where_parts.append(f"{name} — {loc}")
+        elif name:
+            where_parts.append(name)
+    where_to_find = "\n".join(where_parts)
+
+    # Prefer the official homepage of the first listed store over the generic Tavily link
     link = ""
     for store in stores:
         link = _store_url(store.get("name", ""))
@@ -254,6 +281,7 @@ def pin_recommendation(rec: dict) -> None:
             rec.get("name", ""),
             tasting_notes,
             rec.get("price_range", ""),
+            where_to_find,
             link,
             img_formula,
         ],
