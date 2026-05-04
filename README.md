@@ -10,6 +10,7 @@ A personal Streamlit dashboard for logging cheese tastings, enriching your colle
 - Top flavor keywords across all tasting notes
 - Score over time with a smoothed trend line
 - **Taste Fingerprint** — a radar chart showing your weighted flavor profile (Tangy, Creamy, Funky, Fruity, Nutty, Sharp, Salty, Smoky) across your entire collection
+- **Origin Map** — Plotly choropleth of every country you've tried, shaded red→amber→green by average score (appears once the `Country` column is populated via Auto-fill)
 
 ### 🧀 My Collection
 - Sortable table of every cheese with color-coded scores and tasting note source badges (`✅ cheese.com` / `🌐 web` / `🤖 LLM`)
@@ -20,6 +21,12 @@ A personal Streamlit dashboard for logging cheese tastings, enriching your colle
 - Log a new cheese directly to your Google Sheet
 - **Auto-fill details** — type a cheese name and click the button to have an LLM infer milk type, style, and country of origin; fields are pre-filled but fully editable
 - New `Milk Type`, `Style`, and `Country` columns are created in the sheet automatically on first use
+
+### 📋 Wishlist
+- Browse every cheese you've pinned, with image, tasting notes, price, and store locations
+- **Mark as Tried** — pre-fills the Add Entry form with one click
+- **Remove** — deletes the entry from the sheet immediately
+- 60-second cache with a manual Refresh button
 
 ### ✨ Recommendations
 - AI recommendations personalised to your highest-rated cheeses, tasting notes, and tagged profile (milk type, style, country breakdown)
@@ -130,4 +137,5 @@ Cheese Tracker/
 | Generate Recommendations | OpenRouter (1 call) + Tavily (1 image search per recommendation) |
 | Find Similar | OpenRouter (1 call) + Tavily (image searches) |
 | Auto-fill details | OpenRouter (1 call, max 120 tokens) |
-| Pin to Wishlist | Google Sheets only |
+| Pin to Wishlist / Remove | Google Sheets only |
+| Wishlist tab (view) | Google Sheets only |

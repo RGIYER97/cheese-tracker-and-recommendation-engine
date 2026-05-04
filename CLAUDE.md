@@ -32,6 +32,16 @@ Stored in `.env` (copy from `.env.example`). Never commit `.env`.
 | `.streamlit/config.toml` | Forces light theme — must exist or dark-mode systems break readability |
 | `recommendations_cache.json` | Local disk cache for recommendation results (auto-created) |
 
+## Tabs
+
+| Tab | Key |
+|---|---|
+| 📊 Dashboard | `tab_dash` |
+| 🧀 My Collection | `tab_collection` |
+| ➕ Add Entry | `tab_add` |
+| ✨ Recommendations | `tab_recs` |
+| 📋 Wishlist | `tab_wishlist` |
+
 ## Google Sheets layout
 
 Spreadsheet ID: `18CJ8MrQQw7y6K1rL6Uqa95CEF-X_2fqwUX_RnrZlyiI`
@@ -64,6 +74,15 @@ Auto-tag (added by Add Entry form): `Milk Type`, `Style`, `Country`
 3. If nothing found: returns `("", "")`.
 
 The collection table displays the source as `✅ cheese.com`, `🌐 web`, or `🤖 LLM`.
+
+### Origin Map
+`px.choropleth` at the bottom of the Dashboard tab. Groups the `Country` column by average score and count; uses `locationmode="country names"`. Silently hidden when the `Country` column doesn't exist yet (i.e. before any auto-tag runs).
+
+### Wishlist tab
+`load_wishlist_data()` (cached 60 s) calls `sheets.load_wishlist()` which reads the full Cheese Recommendation sheet and returns `list[dict]`. `_parse_image_url()` extracts the raw URL from the `=IMAGE("url", 1)` formula stored in the Image column so images can be rendered in Streamlit.
+
+- **Mark as Tried** sets `prefill_from_rec = {"name": name}` and `_prefill_source`, then reruns — picked up by the Add Entry tab on the next render.
+- **Remove** calls `sheets.remove_from_wishlist(name)`, clears the `load_wishlist_data` cache, discards the name from `pinned_names` in session state, and reruns.
 
 ### Recommendation confidence
 Each recommendation card shows two confidence numbers:
