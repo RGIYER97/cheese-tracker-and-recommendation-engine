@@ -10,7 +10,7 @@ SCOPES = [
 ]
 SPREADSHEET_ID = "18CJ8MrQQw7y6K1rL6Uqa95CEF-X_2fqwUX_RnrZlyiI"
 CHEESE_SHEET = os.environ.get("CHEESE_SHEET_NAME", "cheese")
-ENRICHMENT_COLS = ["Link", "Est. Price", "Image", "Prof. Tasting Notes", "Nutrition"]
+ENRICHMENT_COLS = ["Link", "Est. Price", "Image", "Prof. Tasting Notes", "Notes Source", "Nutrition"]
 
 
 def _client() -> gspread.Client:
@@ -84,12 +84,13 @@ def update_enrichment(df_enriched: pd.DataFrame) -> None:
             cell = gspread.utils.rowcol_to_a1(header_idx + 1, col_num)
             batch.append({"range": cell, "values": [[col_name]]})
 
-    link_col      = headers.index("Link") + 1
-    price_col     = headers.index("Est. Price") + 1
-    img_col       = headers.index("Image") + 1
-    notes_col     = headers.index("Prof. Tasting Notes") + 1
-    nutrition_col = headers.index("Nutrition") + 1
-    name_col      = headers.index("Cheese Type")
+    link_col       = headers.index("Link") + 1
+    price_col      = headers.index("Est. Price") + 1
+    img_col        = headers.index("Image") + 1
+    notes_col      = headers.index("Prof. Tasting Notes") + 1
+    source_col     = headers.index("Notes Source") + 1
+    nutrition_col  = headers.index("Nutrition") + 1
+    name_col       = headers.index("Cheese Type")
 
     for row_idx in range(header_idx + 1, len(rows)):
         row = rows[row_idx]
@@ -115,6 +116,7 @@ def update_enrichment(df_enriched: pd.DataFrame) -> None:
             (price_col,     _val("Est. Price")),
             (img_col,       img_formula),
             (notes_col,     _val("Prof. Tasting Notes")),
+            (source_col,    _val("Notes Source")),
             (nutrition_col, _val("Nutrition")),
         ]:
             if value:

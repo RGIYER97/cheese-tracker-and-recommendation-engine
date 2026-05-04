@@ -12,8 +12,8 @@ A personal Streamlit dashboard for logging cheese tastings, enriching your colle
 - **Taste Fingerprint** — a radar chart showing your weighted flavor profile (Tangy, Creamy, Funky, Fruity, Nutty, Sharp, Salty, Smoky) across your entire collection
 
 ### 🧀 My Collection
-- Sortable table of every cheese with color-coded scores
-- **Enrich All Cheeses** — one click fetches official store links, estimated prices, an inline image formula, professional tasting notes (via cheese.com + LLM fallback), and nutrition data from Open Food Facts, writing everything back to your sheet
+- Sortable table of every cheese with color-coded scores and tasting note source badges (`✅ cheese.com` / `🌐 web` / `🤖 LLM`)
+- **Enrich All Cheeses** — one click fetches official store links, estimated prices, an inline image formula, professional tasting notes (via cheese.com → web → LLM fallback), nutrition data from Open Food Facts, and records the note source — all written back to your sheet
 - **Compare Cheeses** — pick 2–3 cheeses for a side-by-side score and flavor radar overlay
 
 ### ➕ Add Entry
@@ -23,8 +23,10 @@ A personal Streamlit dashboard for logging cheese tastings, enriching your colle
 
 ### ✨ Recommendations
 - AI recommendations personalised to your highest-rated cheeses, tasting notes, and tagged profile (milk type, style, country breakdown)
+- Both your personal tasting notes and professional notes are shown to the model; personal notes take precedence when they conflict
+- Each card shows two confidence scores: the **model's own confidence** and a data-driven **Your match** score (1–10) computed from how closely the recommendation's milk type, style, and country align with your top-rated cheeses
 - Each recommendation includes: flavor profile, *"Because you gave X a Y/10 for Z…"* reasoning, tasting note tags, price range, store locations (Aldi/Trader Joe's first → Whole Foods/Lidl → specialty shops near South Orange NJ / Manhattan), and pairing suggestions
-- **Pin to Wishlist** — saves to a dedicated *Cheese Recommendation* tab in your sheet with tasting notes, price, store link, and an inline image
+- **Pin to Wishlist** — saves to a dedicated *Cheese Recommendation* tab in your sheet with tasting notes, price, store locations, link, and an inline image
 - **Mark as Tried** — pre-fills the Add Entry form from a wishlist card with one click
 - **Find Me Something Like X** — pick any cheese from your collection and get 3 close alternatives
 - Local disk cache so recommendations persist across browser refreshes
@@ -85,7 +87,12 @@ Minimum columns needed to start:
 |---|---|---|---|---|
 | Manchego | May 2025 | Trader Joe's | 9 | Nutty, firm, slightly salty |
 
-The app will add enrichment columns (`Link`, `Est. Price`, `Image`, `Prof. Tasting Notes`, `Nutrition`) and auto-tag columns (`Milk Type`, `Style`, `Country`) as needed — you don't need to create them manually.
+The app adds columns automatically as features are used — you never need to create them manually:
+
+| Column | Added by |
+|---|---|
+| `Link`, `Est. Price`, `Image`, `Prof. Tasting Notes`, `Notes Source`, `Nutrition` | Enrich All Cheeses |
+| `Milk Type`, `Style`, `Country` | Add Entry → Auto-fill |
 
 ## Model selection
 
@@ -119,7 +126,7 @@ Cheese Tracker/
 | Action | APIs called |
 |---|---|
 | Load data | Google Sheets only |
-| Enrich All Cheeses | Tavily (per cheese: 1–3 searches) + Open Food Facts (1 request) + OpenRouter (LLM fallback for tasting notes, only when needed) |
+| Enrich All Cheeses | Tavily (1–3 searches per cheese) + Open Food Facts (1 request per cheese) + OpenRouter (LLM fallback for tasting notes, only when web extraction fails) |
 | Generate Recommendations | OpenRouter (1 call) + Tavily (1 image search per recommendation) |
 | Find Similar | OpenRouter (1 call) + Tavily (image searches) |
 | Auto-fill details | OpenRouter (1 call, max 120 tokens) |

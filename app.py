@@ -590,9 +590,54 @@ def score_style(val):
     return "color: #B71C1C; font-weight: 700"        # red
 
 
+def _local_confidence(rec: dict, df: pd.DataFrame) -> float | None:
+    """
+    Score 1–10: how well a recommendation's tags (milk type, style, country)
+    match the user's top-rated cheeses (score >= 7), weighted by score.
+    Returns None when no tag columns exist to compare against.
+    """
+    top = df[df["Score"] >= 7].copy()
+    if top.empty:
+        return None
+    total_w = float(top["Score"].sum())
+    if total_w == 0:
+        return None
+
+    signals: list[float] = []
+
+    rec_milk = (rec.get("milk_type") or "").strip().lower()
+    if rec_milk and "Milk Type" in top.columns:
+        mask = top["Milk Type"].fillna("").str.strip().str.lower() == rec_milk
+        signals.append(float(top.loc[mask, "Score"].sum()) / total_w)
+
+    rec_type_words = set((rec.get("type") or "").lower().split())
+    if rec_type_words and "Style" in top.columns:
+        mask = top["Style"].fillna("").apply(
+            lambda s: bool(rec_type_words & set(s.lower().split()))
+        )
+        signals.append(float(top.loc[mask, "Score"].sum()) / total_w)
+
+    rec_country = (rec.get("origin") or "").split(",")[0].strip().lower()
+    if rec_country and "Country" in top.columns:
+        mask = top["Country"].fillna("").str.strip().str.lower() == rec_country
+        signals.append(float(top.loc[mask, "Score"].sum()) / total_w)
+
+    if not signals:
+        return None
+    return round(1.0 + (sum(signals) / len(signals)) * 9.0, 1)
+
+
 def render_rec_card(rec: dict, card_idx: int, is_pinned: bool = False):
-    confidence = rec.get("confidence", "")
-    conf_str = f"  ·  Confidence {confidence}/10" if confidence else ""
+    model_conf  = rec.get("confidence", "")
+    local_conf  = _local_confidence(rec, df)
+
+    conf_parts: list[str] = []
+    if model_conf:
+        conf_parts.append(f"Model: {model_conf}/10")
+    if local_conf is not None:
+        conf_parts.append(f"Your match: {local_conf}/10")
+    conf_str = "  ·  " + "  ·  ".join(conf_parts) if conf_parts else ""
+
     st.markdown(
         f"""<div class="cheese-card">
             <h3>{rec['name']}</h3>
@@ -818,13 +863,21 @@ with tab_collection:
 
     display_df = df.sort_values(sort_col, ascending=sort_asc, na_position="last")
 
+    def _fmt_source(v: object) -> str:
+        s = str(v).strip() if v and str(v).strip() else ""
+        return {"cheese.com": "✅ cheese.com", "LLM": "🤖 LLM", "web": "🌐 web"}.get(s, s)
+
+    fmt: dict = {
+        "Score": lambda v: f"{v:.1f}" if pd.notna(v) else "",
+        "Date":  lambda d: d.strftime("%b %Y") if pd.notna(d) else "",
+    }
+    if "Notes Source" in display_df.columns:
+        fmt["Notes Source"] = _fmt_source
+
     styled = (
         display_df.style
         .map(score_style, subset=["Score"])
-        .format({
-            "Score": lambda v: f"{v:.1f}" if pd.notna(v) else "",
-            "Date":  lambda d: d.strftime("%b %Y") if pd.notna(d) else "",
-        })
+        .format(fmt)
     )
     st.dataframe(styled, use_container_width=True, height=540)
 

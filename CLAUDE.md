@@ -44,22 +44,34 @@ The workbook has two sheets:
 
 Core: `Cheese Type`, `Date` (Month YYYY), `From Where`, `Score`, `Tasting Notes`
 
-Enrichment (added by the app): `Link`, `Est. Price`, `Image` (=IMAGE formula), `Prof. Tasting Notes`, `Nutrition`
+Enrichment (added by the app): `Link`, `Est. Price`, `Image` (=IMAGE formula), `Prof. Tasting Notes`, `Notes Source`, `Nutrition`
 
 Auto-tag (added by Add Entry form): `Milk Type`, `Style`, `Country`
+
+### Cheese Recommendation sheet columns
+
+`Name`, `Tasting Notes`, `Price`, `Where to Find It`, `Link`, `Image`
 
 ## Key architecture patterns
 
 ### Enrichment skip logic
-`enrich_dataframe()` checks each field individually — `needs_link`, `needs_price`, `needs_image`, `needs_notes`, `needs_nutrition` — and only fetches/writes fields that are currently empty. Re-running enrichment on an already-enriched sheet is safe and fast.
+`enrich_dataframe()` checks each field individually — `needs_link`, `needs_price`, `needs_image`, `needs_notes`, `needs_nutrition` — and only fetches/writes fields that are currently empty. Re-running enrichment on an already-enriched sheet is safe and fast. `Notes Source` is always written alongside `Prof. Tasting Notes` (same fetch, no extra API call).
 
-### Tasting note quality gate
-`_fetch_tasting_notes()` runs a two-stage pipeline:
-1. Fast path: regex extraction + `_looks_like_tasting_notes()` (requires ≥3 tasting-vocab words)
-2. LLM fallback: passes raw snippets to the model when the fast path produces non-tasting content (blog titles, navigation menus, etc.)
+### Tasting note quality gate + source tracking
+`_fetch_tasting_notes()` returns `(notes: str, source: str)` and runs a two-stage pipeline:
+1. Fast path: regex extraction + `_looks_like_tasting_notes()` (requires ≥3 tasting-vocab words). Source is `"cheese.com"` or `"web"` depending on which query succeeded.
+2. LLM fallback: passes raw snippets to the model when the fast path produces non-tasting content. Source is `"LLM"`.
+3. If nothing found: returns `("", "")`.
+
+The collection table displays the source as `✅ cheese.com`, `🌐 web`, or `🤖 LLM`.
+
+### Recommendation confidence
+Each recommendation card shows two confidence numbers:
+- **Model confidence** — the score the LLM assigned itself (from the JSON response).
+- **Your match** — computed by `_local_confidence()` in `app.py`. Looks at the user's top-rated cheeses (score ≥ 7), checks how much of their score-weight shares the recommendation's milk type, style, and country, and maps to 1–10. Returns `None` (hidden) when no tag columns exist yet.
 
 ### Recommendation prompt
-`_build_prompt()` injects a `MY CHEESE PROFILE` block from the `Milk Type`, `Style`, and `Country` columns when they exist. The `why_youll_love_it` field always cites a specific cheese name and score from the collection.
+`_build_prompt()` injects a `MY CHEESE PROFILE` block from the `Milk Type`, `Style`, and `Country` columns when they exist. Both personal and professional tasting notes are shown per cheese, with an explicit instruction to trust personal notes when they differ. The `why_youll_love_it` field always cites a specific cheese name and score from the collection.
 
 ### Session state keys (app.py)
 

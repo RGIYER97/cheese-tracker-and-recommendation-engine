@@ -156,9 +156,14 @@ def _llm_extract_notes(cheese_name: str, snippets: list[str]) -> str:
         return ""
 
 
-def _fetch_tasting_notes(client: TavilyClient, cheese_name: str) -> str:
+def _fetch_tasting_notes(client: TavilyClient, cheese_name: str) -> tuple[str, str]:
     """
     Fetch professional tasting notes for a cheese.
+    Returns (notes, source) where source is one of:
+      "cheese.com" — found via the cheese.com search
+      "web"        — found via a general web search
+      "LLM"        — synthesised by the LLM fallback
+      ""           — nothing found
 
     Stage 1 — fast path: search cheese.com, then a general tasting-notes query.
               Return immediately if the extracted text looks like real tasting notes.
@@ -166,13 +171,13 @@ def _fetch_tasting_notes(client: TavilyClient, cheese_name: str) -> str:
               content to an LLM to extract or synthesise clean notes.
     """
     queries = [
-        f"{cheese_name} site:cheese.com",
-        f'"{cheese_name}" cheese tasting notes flavor',
-        f"{cheese_name} cheese tasting notes flavor description",
+        (f"{cheese_name} site:cheese.com",                   "cheese.com"),
+        (f'"{cheese_name}" cheese tasting notes flavor',      "web"),
+        (f"{cheese_name} cheese tasting notes flavor description", "web"),
     ]
     raw_snippets: list[str] = []
 
-    for query in queries:
+    for query, source_label in queries:
         try:
             resp = client.search(query, search_depth="basic", max_results=3)
             for r in resp.get("results", []):
@@ -181,15 +186,17 @@ def _fetch_tasting_notes(client: TavilyClient, cheese_name: str) -> str:
                     continue
                 notes = _extract_notes(content)
                 if notes and _looks_like_tasting_notes(notes):
-                    return notes
-                if content:
-                    raw_snippets.append(content)
+                    return notes, source_label
+                raw_snippets.append(content)
         except Exception as exc:
             print(f"[enrichment/notes] {cheese_name}: {exc}")
         time.sleep(0.25)
 
     # Fast path found nothing useful — fall back to LLM
-    return _llm_extract_notes(cheese_name, raw_snippets)
+    llm_notes = _llm_extract_notes(cheese_name, raw_snippets)
+    if llm_notes:
+        return llm_notes, "LLM"
+    return "", ""
 
 
 def _fetch_off_nutrition(cheese_name: str) -> str:
@@ -250,7 +257,7 @@ def search_cheese_info(
     fetch_notes  – retrieve Prof. Tasting Notes (cheese.com preferred)
     """
     client = _tavily()
-    result = {"Link": "", "Est. Price": "", "Image URL": "", "Prof. Tasting Notes": ""}
+    result = {"Link": "", "Est. Price": "", "Image URL": "", "Prof. Tasting Notes": "", "Notes Source": ""}
 
     if fetch_store:
         domain      = _store_domain(from_where)
@@ -284,7 +291,9 @@ def search_cheese_info(
             print(f"[enrichment/store] {cheese_name}: {exc}")
 
     if fetch_notes:
-        result["Prof. Tasting Notes"] = _fetch_tasting_notes(client, cheese_name)
+        notes, source = _fetch_tasting_notes(client, cheese_name)
+        result["Prof. Tasting Notes"] = notes
+        result["Notes Source"] = source
 
     return result
 
@@ -297,7 +306,7 @@ def enrich_dataframe(
     # "Image URL" is the internal working column; "Image" (formula) comes from the sheet
     if "Image URL" not in df.columns:
         df["Image URL"] = ""
-    for col in ("Link", "Est. Price", "Prof. Tasting Notes", "Nutrition"):
+    for col in ("Link", "Est. Price", "Prof. Tasting Notes", "Notes Source", "Nutrition"):
         if col not in df.columns:
             df[col] = ""
 
@@ -334,6 +343,7 @@ def enrich_dataframe(
             if needs_price and info["Est. Price"]:          df.at[idx, "Est. Price"]          = info["Est. Price"]
             if needs_image and info["Image URL"]:           df.at[idx, "Image URL"]           = info["Image URL"]
             if needs_notes and info["Prof. Tasting Notes"]: df.at[idx, "Prof. Tasting Notes"] = info["Prof. Tasting Notes"]
+            if needs_notes and info["Notes Source"]:        df.at[idx, "Notes Source"]        = info["Notes Source"]
 
         if needs_nutrition:
             nutrition = _fetch_off_nutrition(name)
