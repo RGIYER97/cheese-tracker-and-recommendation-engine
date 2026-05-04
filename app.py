@@ -572,6 +572,12 @@ def _make_radar(series: dict[str, dict[str, float]], title: str = "") -> go.Figu
     return fig
 
 
+def _parse_image_url(formula: str) -> str:
+    """Extract the raw URL from a Sheets =IMAGE("url", 1) formula."""
+    m = re.match(r'=IMAGE\("([^"]+)"', formula.strip())
+    return m.group(1) if m else ""
+
+
 def flavor_keywords(df: pd.DataFrame, top_n: int = 20) -> pd.DataFrame:
     notes = " ".join(df["Tasting Notes"].fillna("").tolist()).lower()
     tokens = re.findall(r"[a-z]+", notes)
@@ -708,6 +714,12 @@ def load_data() -> pd.DataFrame:
     return load_cheese_data()
 
 
+@st.cache_data(ttl=60, show_spinner="Loading wishlist…")
+def load_wishlist_data() -> list[dict]:
+    from sheets import load_wishlist
+    return load_wishlist()
+
+
 try:
     df = load_data()
 except EnvironmentError:
@@ -744,8 +756,8 @@ if "recommendations" not in st.session_state:
 
 
 # ── Tabs ───────────────────────────────────────────────────────────────────────
-tab_dash, tab_collection, tab_add, tab_recs = st.tabs(
-    ["📊 Dashboard", "🧀 My Collection", "➕ Add Entry", "✨ Recommendations"]
+tab_dash, tab_collection, tab_add, tab_recs, tab_wishlist = st.tabs(
+    ["📊 Dashboard", "🧀 My Collection", "➕ Add Entry", "✨ Recommendations", "📋 Wishlist"]
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -847,6 +859,36 @@ with tab_dash:
     _, col_fp, _ = st.columns([1, 2, 1])
     with col_fp:
         st.plotly_chart(_make_radar({"My Palate": fingerprint}), use_container_width=True)
+
+    if "Country" in df.columns:
+        map_df = (
+            df[df["Country"].str.strip() != ""]
+            .groupby("Country")["Score"]
+            .agg(avg_score="mean", count="count")
+            .reset_index()
+        )
+        if not map_df.empty:
+            st.divider()
+            st.subheader("Origin Map")
+            st.caption("Countries you've tried, shaded by average score.")
+            fig_map = px.choropleth(
+                map_df,
+                locations="Country",
+                locationmode="country names",
+                color="avg_score",
+                hover_name="Country",
+                hover_data={"count": True, "avg_score": ":.1f"},
+                color_continuous_scale=[[0, "#D9534F"], [0.5, "#F0AD4E"], [1, "#2E8B40"]],
+                range_color=[4, 10],
+                labels={"avg_score": "Avg Score", "count": "# Cheeses"},
+                title="Average score by country of origin",
+            )
+            fig_map.update_layout(
+                geo=dict(showframe=False, showcoastlines=True, bgcolor=BG_PAPER),
+                coloraxis_colorbar=dict(title="Avg Score"),
+                **PLOT_LAYOUT,
+            )
+            st.plotly_chart(fig_map, use_container_width=True)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1201,6 +1243,85 @@ with tab_recs:
                     card_idx=1000 + j,
                     is_pinned=rec.get("name", "") in pinned_names,
                 )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TAB 5 — WISHLIST
+# ─────────────────────────────────────────────────────────────────────────────
+with tab_wishlist:
+    st.subheader("My Wishlist")
+    st.caption("Cheeses you've pinned to try. Mark as Tried to pre-fill the Add Entry form, or remove ones you've decided against.")
+
+    col_wl_refresh, _ = st.columns([1, 5])
+    with col_wl_refresh:
+        if st.button("🔄 Refresh", key="wl_refresh"):
+            load_wishlist_data.clear()
+            st.rerun()
+
+    wishlist = load_wishlist_data()
+
+    if not wishlist:
+        st.info("No cheeses pinned yet — go to the **Recommendations** tab and hit **Save to Wishlist**.")
+    else:
+        st.caption(f"{len(wishlist)} cheese{'es' if len(wishlist) != 1 else ''} on your list")
+        st.divider()
+
+        for i in range(0, len(wishlist), 3):
+            row_cols = st.columns(3)
+            for j, col in enumerate(row_cols):
+                idx = i + j
+                if idx >= len(wishlist):
+                    break
+                item     = wishlist[idx]
+                name     = item.get("Name", "")
+                notes    = item.get("Tasting Notes", "")
+                price    = item.get("Price", "")
+                where    = item.get("Where to Find It", "")
+                link     = item.get("Link", "")
+                img_url  = _parse_image_url(item.get("Image", ""))
+
+                with col:
+                    price_line = f"<small>💰 {price}</small>" if price else ""
+                    st.markdown(
+                        f"""<div class="cheese-card">
+                            <h3>{name}</h3>
+                            {price_line}
+                        </div>""",
+                        unsafe_allow_html=True,
+                    )
+                    if img_url:
+                        try:
+                            st.image(img_url, width=260)
+                        except Exception:
+                            pass
+                    if notes:
+                        st.caption(notes)
+                    if where:
+                        st.markdown("📍 **Where to find it:**")
+                        for line in where.splitlines():
+                            if line.strip():
+                                st.markdown(f"- {line.strip()}")
+                    if link:
+                        st.markdown(f"[🔗 More info]({link})")
+
+                    btn_a, btn_b = st.columns(2)
+                    with btn_a:
+                        if st.button("☑️ Mark as Tried", key=f"wl_tried_{idx}", type="primary"):
+                            st.session_state["prefill_from_rec"] = {"name": name}
+                            st.session_state["_prefill_source"] = name
+                            st.toast(f"Switch to Add Entry to log '{name}'!")
+                            st.rerun()
+                    with btn_b:
+                        if st.button("🗑 Remove", key=f"wl_remove_{idx}"):
+                            try:
+                                from sheets import remove_from_wishlist
+                                remove_from_wishlist(name)
+                                load_wishlist_data.clear()
+                                st.session_state.get("pinned_names", set()).discard(name)
+                                st.rerun()
+                            except Exception as exc:
+                                st.error(f"Could not remove: {exc}")
+                    st.markdown("---")
 
 
 # ── Sidebar ────────────────────────────────────────────────────────────────────

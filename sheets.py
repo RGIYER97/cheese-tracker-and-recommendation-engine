@@ -244,6 +244,38 @@ def load_pinned_cheeses() -> list[str]:
         return []
 
 
+def load_wishlist() -> list[dict]:
+    """Return all rows from the Cheese Recommendation sheet as a list of dicts."""
+    try:
+        sh = _client().open_by_key(SPREADSHEET_ID)
+        ws = _ensure_rec_sheet(sh)
+        rows = ws.get_all_values()
+        if len(rows) < 2:
+            return []
+        headers = [h.strip() for h in rows[0]]
+        result = []
+        for row in rows[1:]:
+            if not row or not row[0].strip():
+                continue
+            padded = row + [""] * (len(headers) - len(row))
+            result.append(dict(zip(headers, padded)))
+        return result
+    except Exception:
+        return []
+
+
+def remove_from_wishlist(name: str) -> None:
+    """Remove a cheese from the Recommendation sheet by name (case-insensitive)."""
+    sh = _client().open_by_key(SPREADSHEET_ID)
+    ws = _ensure_rec_sheet(sh)
+    rows = ws.get_all_values()
+    target = name.strip().lower()
+    for i, row in enumerate(rows[1:], start=2):
+        if row and row[0].strip().lower() == target:
+            ws.delete_rows(i)
+            return
+
+
 def pin_recommendation(rec: dict) -> None:
     """Append a recommendation to the Cheese Recommendation sheet (idempotent)."""
     sh = _client().open_by_key(SPREADSHEET_ID)
